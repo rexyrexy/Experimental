@@ -114,9 +114,6 @@ namespace ItsRengar
 
         private static void OnTick(EventArgs args)
         {
-            if (Rengar.HealthPercent <= AutoHp && _w.IsReady() && Ferocity == 5 && !RengarR)
-                _w.Cast();
-
             if (SwitchComboMode)
             {
                 if (OneShot)
@@ -284,6 +281,8 @@ namespace ItsRengar
         {
             if (Rengar.IsDead)
                 return;
+            if (Rengar.HealthPercent <= AutoHp && _w.IsReady() && Ferocity == 5 && !RengarR)
+                _w.Cast();
             var betaQTarget = GetTarget(1900);
             if (IsValidTarget(betaQTarget, 1000))
             {
