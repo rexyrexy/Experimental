@@ -146,7 +146,7 @@ namespace ItsRengar
                 return;
 
             if (DrawERange)
-                Circle.Draw(_e.IsReady() ? Color.Cyan : Color.White, _e.Range, Rengar);
+                Drawing.DrawCircle(Rengar.Position,_e.Range,_e.IsReady() ? System.Drawing.Color.Cyan : System.Drawing.Color.White);
 
             if (DrawSelectedTarget)
                 if (_selectedEnemy.IsValidTarget() && _selectedEnemy.IsVisible)
