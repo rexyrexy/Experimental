@@ -357,7 +357,7 @@ namespace ItsRengar
                     CastQ(target);
                 }
                 if (!ForceE) return;
-                if (target.Distance(Rengar) > _q.Range && target.Distance(Rengar) < _e.Range && !Rengar.IsDashing())
+                if (target.Distance(Rengar) > _q.Range + 285 && target.Distance(Rengar) < _e.Range && !Rengar.IsDashing())
                     CastE(target);
             }
             if (!Snare) return;
