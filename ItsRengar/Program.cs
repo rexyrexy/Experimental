@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using EloBuddy;
 using EloBuddy.SDK;
@@ -29,7 +28,6 @@ namespace ItsRengar
         private static bool SwitchE => ComboM["switche"].Cast<CheckBox>().CurrentValue;
         private static bool DrawUltiTime => MiscM["ultitimer"].Cast<CheckBox>().CurrentValue;
         private static bool DrawERange => MiscM["drawe"].Cast<CheckBox>().CurrentValue;
-        //private static bool Anti => MiscM["anti"].Cast<CheckBox>().CurrentValue;
         private static int AutoHp => MiscM["autohp"].Cast<Slider>().CurrentValue;
         private static bool DrawSelectedMode => MiscM["drawmode"].Cast<CheckBox>().CurrentValue;
         private static bool DrawSelectedTarget => MiscM["drawselectedtarget"].Cast<CheckBox>().CurrentValue;
@@ -75,7 +73,6 @@ namespace ItsRengar
             ClearM.AddLabel("Clear Settings are Usage Q-W-E and Saves Ferocity");
 
             MiscM.AddLabel("Misc Settings");
-            //MiscM.Add("anti", new CheckBox("Anti Gapcloser - Interrupter"));
             MiscM.Add("ultitimer", new CheckBox("Draw Ulti Buff Time"));
             MiscM.Add("drawe", new CheckBox("Draw E range"));
             MiscM.AddLabel("If you don't want to AutoHp set it value to 0");
@@ -92,8 +89,6 @@ namespace ItsRengar
             Orbwalker.OnPostAttack += OnPostAttack;
             Dash.OnDash += OnDash;
             Obj_AI_Base.OnSpellCast += OnSpellCast;
-            /*Gapcloser.OnGapcloser += OnGapcloser;
-            Interrupter.OnInterruptableSpell += OnInterruptableSpell;*/
             Game.OnWndProc += OnWndProc;
             Drawing.OnDraw += OnDraw;
             Game.OnTick += OnTick;
@@ -101,29 +96,15 @@ namespace ItsRengar
             Chat.Print("ItsRengar | Loaded", Color.White);
         }
 
-        /* private static void OnInterruptableSpell(Obj_AI_Base sender, Interrupter.InterruptableSpellEventArgs e)
-        {
-            if (!Anti)
-                return;
-            if (e.Sender.IsEnemy && e.Sender.Distance(Rengar) < _e.Range)
-            CastE(e.Sender);
-        }
-
-        private static void OnGapcloser(AIHeroClient sender, Gapcloser.GapcloserEventArgs e)
-        {
-            if (!Anti)
-                return;
-            if (e.Sender.IsEnemy && e.Sender.Distance(Rengar) < _e.Range)
-                CastE(e.Sender);
-        }*/
-
         private static void OnSpellCast(Obj_AI_Base sender, GameObjectProcessSpellCastEventArgs args)
         {
             if (!sender.IsMe)
                 return;
 
-            if (args.Slot == SpellSlot.Q)
+            if (args.Slot == SpellSlot.Q && GetTarget().IsValidTarget(_q.Range)) { 
                 Orbwalker.ResetAutoAttack();
+                Player.IssueOrder(GameObjectOrder.AttackTo, GetTarget());
+            }
 
             if (SwitchE && Snare && args.Slot == SpellSlot.E)
             {
@@ -139,9 +120,9 @@ namespace ItsRengar
             if (SwitchComboMode)
             {
                 if (OneShot)
-                    Core.DelayAction(() => ComboM["mode"].Cast<ComboBox>().CurrentValue = 1, 120);
+                    Core.DelayAction(() => ComboM["mode"].Cast<ComboBox>().CurrentValue = 1, 250);
                 else if (Snare)
-                    Core.DelayAction(() => ComboM["mode"].Cast<ComboBox>().CurrentValue = 0, 120);
+                    Core.DelayAction(() => ComboM["mode"].Cast<ComboBox>().CurrentValue = 0, 250);
             }
 
             if (Rengar.SkinId != Skin)
@@ -150,26 +131,16 @@ namespace ItsRengar
 
         private static void OnWndProc(WndEventArgs args)
         {
-            //
-            //Thanks to Nathan / jQuery
-            //
-
             if (args.Msg != (uint) WindowMessages.LeftButtonDown)
             {
                 return;
             }
 
-            var unit2 =
-                ObjectManager.Get<Obj_AI_Base>()
-                    .FirstOrDefault(
-                        a =>
-                            a.IsValid && a.IsEnemy && a.Distance(Game.CursorPos) < Rengar.BoundingRadius + 1000 &&
-                            a.IsValidTarget() && !a.IsMonster && !a.IsMinion && !(a is Obj_AI_Turret));
+            var unit = EntityManager.Heroes.Enemies
+                    .FindAll(hero => hero.IsValidTarget() && hero.Distance(Game.CursorPos, true) < 40000)
+                    .OrderBy(h => h.Distance(Game.CursorPos, true)).FirstOrDefault();
 
-            if (unit2 != null)
-            {
-                _selectedEnemy = unit2 as AIHeroClient;
-            }
+            _selectedEnemy = unit;
         }
 
         private static void OnDraw(EventArgs args)
@@ -295,8 +266,12 @@ namespace ItsRengar
 
             var aatarget = GetTarget();
 
-            if (aatarget.NetworkId != target.NetworkId && aatarget.IsValidTarget())
+            if (aatarget.NetworkId != target.NetworkId)
+            {
+                Orbwalker.ResetAutoAttack();
                 args.Process = false;
+                Orbwalker.ResetAutoAttack();
+            }
 
             var targetQ = GetTarget(_q.Range);
 
@@ -326,56 +301,41 @@ namespace ItsRengar
 
         private static void LaneClear()
         {
-            var allMinions = EntityManager.MinionsAndMonsters.Get(
-                EntityManager.MinionsAndMonsters.EntityType.Minion,
-                EntityManager.UnitTeam.Enemy,
-                ObjectManager.Player.Position,
-                _w.Range,
-                false);
+            var laneclearminion =
+                EntityManager.MinionsAndMonsters.EnemyMinions.Where(x => x.IsValidTarget(_w.Range))
+                    .OrderByDescending(x => x.Health)
+                    .FirstOrDefault(x => x != null);
 
+            if (laneclearminion == null || !laneclearminion.IsValidTarget())
+                return;
             if (Ferocity == 5)
                 return;
-            if (allMinions == null)
-            {
-                return;
-            }
 
-
-            var objAiMinions = allMinions as IList<Obj_AI_Minion> ?? allMinions.ToList();
-            foreach (var minion in objAiMinions)
-            {
-                var any = objAiMinions.Any();
-                {
-                    if (_q.IsReady() && minion.IsValidTarget())
-                        _q.Cast();
-                    if (_w.IsReady() && minion.IsValidTarget())
-                        _w.Cast();
-                    if (_e.IsReady() && minion.IsValidTarget())
-                        _e.Cast(minion);
-                }
-            }
-
-            //Thanks Kappa
+            if (_q.IsReady())
+                _q.Cast();
+            if (_w.IsReady())
+                _w.Cast();
+            if (_e.IsReady())
+                _e.Cast(laneclearminion);
         }
 
         private static void JungleClear()
         {
-            var jmobs =
-                ObjectManager.Get<Obj_AI_Minion>()
-                    .OrderBy(m => m.CampNumber)
-                    .Where(m => m.IsMonster && m.IsEnemy && !m.IsDead);
-            var objAiMinions = jmobs as IList<Obj_AI_Minion> ?? jmobs.ToList();
+            var junglemonsters =
+                EntityManager.MinionsAndMonsters.GetJungleMonsters(Rengar.Position, _w.Range)
+                    .OrderByDescending(x => x.MaxHealth)
+                    .FirstOrDefault(x => x != null);
+
+            if (junglemonsters == null || !junglemonsters.IsValidTarget())
+                return;
             if (Ferocity == 5)
                 return;
-            foreach (var jmob in objAiMinions)
-            {
-                if (_q.IsReady() && jmob.IsValidTarget(_q.Range))
-                    _q.Cast();
-                if (_w.IsReady() && jmob.IsValidTarget(_w.Range))
-                    _w.Cast();
-                if (_e.IsReady() && jmob.IsValidTarget(_e.Range))
-                    _e.Cast(jmob);
-            }
+            if(_q.IsReady())
+                _q.Cast();
+            if (_w.IsReady())
+                _w.Cast();
+            if (_e.IsReady())
+                _e.Cast(junglemonsters);
         }
 
         private static void Combo()
@@ -487,7 +447,7 @@ namespace ItsRengar
 
         private static AIHeroClient GetTarget(float range = 1250)
         {
-            return _selectedEnemy ?? TargetSelector.GetTarget(range, DamageType.Physical);
+            return !_selectedEnemy.IsValidTarget(range) || _selectedEnemy.IsDead || !_selectedEnemy.IsVisible ? TargetSelector.GetTarget(range, DamageType.Physical) : _selectedEnemy;
         }
     }
 }
